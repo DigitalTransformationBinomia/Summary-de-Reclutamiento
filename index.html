@@ -335,14 +335,15 @@ function render(){
   $("#byMonthX").innerHTML=months.map(x=>`<span>${x.m}</span>`).join("");
 
   /* detail */
-  const D=(st.onlyDev?P.filter(r=>r.off>0||(r.dev!=null&&r.dev>0)||r.status!=="Cumplida en SLA"):P).slice().sort((x,y)=>x.fcomp<y.fcomp?-1:x.fcomp>y.fcomp?1:x.id<y.id?-1:1);
+  const D=(st.onlyDev?P.filter(r=>r.off>0||(r.dev!=null&&r.dev>0)||r.status!=="Cumplida en SLA"):P).slice().sort((x,y)=>x.fcomp<y.fcomp?-1:x.fcomp>y.fcomp?1:(x.id||x.com||"")<(y.id||y.com||"")?-1:1);
   const sp={"Cumplida en SLA":"good","Cumplida fuera de SLA":"warn","Pendiente":"neu","Incompleta":"crit","Vencida sin entrega":"crit"};
   let dt=`<thead><tr><th>ID requisición</th><th>Banner</th><th>Horario req.</th><th class="n">Req.</th><th class="n">Entregado</th><th class="n">Válido</th><th class="n">Cobertura</th><th>Compromiso</th><th>Entregas</th><th>SLA (días)</th><th>Horario</th><th>Estatus</th></tr></thead><tbody>`;
   D.forEach(r=>{
     const devTxt=r.dev==null?`<span class="pill neu">Sin entrega</span>`:r.dev>0?`<span class="pill crit">Déficit ${r.dev}</span>`:r.dev<0?`<span class="pill good">Superávit ${-r.dev}</span>`:`<span class="pill good">En fecha</span>`;
     const hTxt=r.total===0?"–":r.off===0?`<span class="pill good">Cumple</span>`:`<span class="pill crit">${r.off} en ${esc(r.offH.join(" / "))}</span>`;
     const ent=[r.f1?dmy(r.f1)+" · "+r.c1+" "+esc(r.h1||""):"",r.f2?dmy(r.f2)+" · "+r.c2+" "+esc(r.h2||""):""].filter(Boolean).join("<br>")||"–";
-    dt+=`<tr><td><b>${esc(r.id)}</b></td><td>${esc(r.banner)}</td><td>${esc(r.hreq)}</td><td class="n">${r.req}</td><td class="n">${r.total}</td><td class="n">${r.valid}</td><td class="n">${r.cov==null?"–":pct(r.cov,0)}</td><td>${dmy(r.fcomp)}</td><td style="white-space:nowrap;font-size:12px">${ent}</td><td>${devTxt}</td><td>${hTxt}</td><td><span class="pill ${sp[r.status]}">${r.status}</span></td></tr>`;
+    const lin=(r.com||"").match(/^Línea ([^·]+)/); const idL=r.id?`<b>${esc(r.id)}</b>`:`<span class="muted">Sin ID</span>${lin?`<br><span class="note">${esc(lin[1].trim())}</span>`:""}`;
+    dt+=`<tr><td>${idL}</td><td>${esc(r.banner)}</td><td>${esc(r.hreq)}</td><td class="n">${r.req}</td><td class="n">${r.total}</td><td class="n">${r.valid}</td><td class="n">${r.cov==null?"–":pct(r.cov,0)}</td><td>${dmy(r.fcomp)}</td><td style="white-space:nowrap;font-size:12px">${ent}</td><td>${devTxt}</td><td>${hTxt}</td><td><span class="pill ${sp[r.status]}">${r.status}</span></td></tr>`;
   });
   dt+="</tbody>";
   $("#detail").innerHTML=D.length?dt:`<tbody><tr><td class="empty">No hay requisiciones para mostrar en este periodo.</td></tr></tbody>`;
