@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablero de Reclutamiento</title>
+<style>
+/* Layout: control bar → 4 KPI tiles → funnel → SLA / adherencia → recluta → detalle por ID */
+:root{
+  /* Manual de marca BINOMIA: Pantone 3035C dominante + blanco + 338C; secundarios (Neutral Black, Cool Gray 9C, Bright Orange) subordinados.
+     Titulares Sofia Pro Light, textos SF UI Display, alternativa Arial. Un solo elemento gráfico 338C en el borde superior. */
+  --p3035:#003E52; --p338:#6BCDB2; --black:#212222; --gray9:#76777A; --orange:#F26122;
+  --p3035-80:#335F70; --p3035-60:#668B97; --p338-dk:#2E8F78;
+  --bg:#F4F6F7; --surface:#FFFFFF; --ink:#212222; --ink-2:#4F5254; --muted:#76777A;
+  --line:#E1E5E7; --base:#C9CFD2; --track:#E9EEF0; --chip:#E8F1F3;
+  --s1:var(--p3035); --s2:var(--p338); --s3:var(--gray9); --accent:var(--p3035);
+  --good:#2E8F78; --good-ink:#1F6F5C; --warn:#F26122; --warn-ink:#B5440F; --crit:#C8352E; --crit-ink:#A82A24;
+  --display:"Sofia Pro","SF UI Display",Arial,sans-serif;
+  --body:"SF UI Display",-apple-system,BlinkMacSystemFont,Arial,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--body);border-top:6px solid var(--p338)}
+.band{background:var(--p3035);color:#fff}
+.band .in{max-width:1240px;margin:0 auto;padding:22px 20px;display:flex;flex-wrap:wrap;gap:12px 32px;align-items:center;justify-content:space-between}
+.brandmark{display:flex;align-items:center;gap:26px}
+.brandmark img{height:34px;width:auto;display:block}
+.brandmark .t{border-left:1px solid rgba(255,255,255,.3);padding-left:26px}
+.band h1{color:#fff}
+.band .sub{color:#C9DCE2}
+.band .status{color:#C9DCE2;text-align:right}
+.band .status b{color:#fff;font-weight:600}
+footer.foot{max-width:1240px;margin:0 auto;padding:8px 20px 36px;display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between}
+footer.foot img{height:44px;width:auto}
+.wrap{max-width:1240px;margin:0 auto;padding:20px 20px 48px;display:grid;grid-template-columns:minmax(0,1fr);gap:18px}
+h1,h2{font-family:var(--display);margin:0;text-wrap:balance}
+h1{font-size:22px;font-weight:300;letter-spacing:.3px}
+h2{font-size:19px;font-weight:300;color:var(--p3035)}
+.sub{color:var(--ink-2);font-size:13px}
+.muted{color:var(--muted)}
+.bar{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.seg{display:inline-flex;border:1px solid var(--base);border-radius:8px;overflow:hidden}
+.seg button{font:600 13px var(--body);padding:7px 14px;border:0;background:transparent;color:var(--ink-2);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--p3035);color:#fff}
+.seg button+button{border-left:1px solid var(--base)}
+label.f{display:inline-flex;gap:6px;align-items:center;font-size:12px;color:var(--ink-2)}
+input[type=date],select{font:13px var(--body);padding:6px 8px;border:1px solid var(--base);border-radius:7px;background:var(--surface);color:var(--ink)}
+.spacer{flex:1}
+.btn{font:600 13px var(--body);padding:9px 18px;border-radius:4px;border:0;background:var(--p3035);color:#fff;cursor:pointer}
+.btn:hover{background:var(--p3035-80)}
+.btn.ghost{background:transparent;color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--p338-dk);outline-offset:2px}
+.status{font-size:12px;color:var(--ink-2)}
+.status.err{color:var(--crit-ink)}
+.drop{border:2px dashed var(--base);border-radius:10px;padding:14px;text-align:center;color:var(--ink-2);display:none}
+.drop.on{display:block}
+.drop.hover{border-color:var(--p338);background:var(--chip)}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+.tile{display:grid;gap:8px;align-content:start;border-top:4px solid var(--state,var(--line))}
+.tile .lab{font:600 11.5px var(--body);text-transform:uppercase;letter-spacing:.6px;color:var(--ink-2)}
+.tile .big{font:300 42px/1 var(--display);color:var(--p3035)}
+.tile .det{font-size:12.5px;color:var(--ink-2)}
+.pill{display:inline-flex;align-items:center;gap:5px;font:600 11.5px var(--body);padding:2px 8px;border-radius:99px;white-space:nowrap}
+.pill.good{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good-ink)}
+.pill.warn{background:color-mix(in srgb,var(--warn) 22%,transparent);color:var(--warn-ink)}
+.pill.crit{background:color-mix(in srgb,var(--crit) 15%,transparent);color:var(--crit-ink)}
+.pill.neu{background:var(--chip);color:var(--ink-2)}
+.meter{position:relative;height:12px;background:var(--track);border-radius:6px;overflow:visible}
+.meter>i{position:absolute;left:0;top:0;bottom:0;border-radius:6px;background:var(--s1)}
+.meter>b{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink);left:100%}
+.meter.stack{display:flex;gap:2px;overflow:hidden}
+.meter.stack>span{height:100%}
+.meter.stack>span:first-child{border-radius:6px 0 0 6px}
+.meter.stack>span:last-child{border-radius:0 6px 6px 0}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--ink-2)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.grid2{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.sechead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+/* funnel */
+.funnel{display:grid;gap:6px}
+.fstage{display:grid;grid-template-columns:200px 1fr 120px;gap:12px;align-items:center}
+.fstage .nm{font-weight:600;font-size:13px}
+.fstage .nm small{display:block;font-weight:400;color:var(--muted);font-size:11.5px}
+.ftrack{display:flex;justify-content:center}
+.fbar{height:42px;border-radius:3px;display:flex;align-items:center;justify-content:center;color:#fff;font:600 17px var(--body);min-width:44px;transition:width .3s}
+.fstage .pc{font:300 20px var(--display);color:var(--p3035);text-align:right}
+.fstage .pc small{display:block;font:400 11.5px var(--body);color:var(--muted)}
+.fdrop{grid-column:2;text-align:center;font-size:11.5px;color:var(--muted)}
+/* bars */
+.hbars{display:grid;gap:8px}
+.hrow{display:grid;grid-template-columns:130px 1fr 70px;gap:10px;align-items:center;font-size:13px}
+.hrow .t{height:16px;background:var(--track);border-radius:4px;position:relative}
+.hrow .t>i{position:absolute;left:0;top:0;bottom:0;border-radius:4px}
+.hrow .v{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.hrow .v small{font-weight:400;color:var(--muted)}
+.cols{display:flex;align-items:flex-end;gap:6px;height:190px;padding-top:18px;border-bottom:1px solid var(--base);position:relative}
+.col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;position:relative}
+.col .stk{width:70%;max-width:44px;display:flex;flex-direction:column;justify-content:flex-end;gap:2px}
+.col .stk span{display:block;width:100%}
+.col .stk span:first-child{border-radius:4px 4px 0 0}
+.col .val{font-size:11px;color:var(--ink-2);margin-bottom:3px;font-variant-numeric:tabular-nums}
+.xl{display:flex;gap:6px;font-size:11px;color:var(--muted);margin-top:4px}
+.xl span{flex:1;text-align:center}
+.col.cur .val{color:var(--ink);font-weight:700}
+.dev{display:flex;align-items:flex-end;gap:3px;height:120px;border-bottom:1px solid var(--base)}
+.dev .col .stk{width:80%}
+.stat3{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.stat3 div{border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.stat3 b{display:block;font:300 26px var(--display);color:var(--p3035)}
+.stat3 span{font-size:12px;color:var(--ink-2)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font:600 11.5px var(--body);text-transform:uppercase;letter-spacing:.4px;color:var(--ink-2);text-align:left;padding:8px;border-bottom:1px solid var(--base);white-space:nowrap}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.tscroll{overflow-x:auto;max-height:520px;overflow-y:auto}
+.tscroll thead th{position:sticky;top:0;background:var(--surface)}
+.mini{display:inline-block;width:60px;height:8px;background:var(--track);border-radius:4px;vertical-align:middle;margin-left:6px;position:relative;overflow:hidden}
+.mini i{position:absolute;left:0;top:0;bottom:0;background:var(--s1)}
+.empty{padding:28px;text-align:center;color:var(--ink-2)}
+#tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--surface);font-size:12px;padding:6px 9px;border-radius:6px;opacity:0;transition:opacity .1s;z-index:10;max-width:260px}
+.note{font-size:12px;color:var(--muted)}
+@media (max-width:980px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2,.grid3{grid-template-columns:1fr}}
+@media (max-width:560px){.tiles{grid-template-columns:1fr}.fstage{grid-template-columns:1fr;gap:4px}.fstage .pc{text-align:left}.fdrop{grid-column:1}.hrow{grid-template-columns:100px 1fr 60px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header class="band">
+  <div class="in">
+    <div class="brandmark">
+      <img src="assets/logo-binomia-blanco.svg" alt="BINOMIA">
+      <div class="t">
+        <h1>Reclutamiento · Tablero de resultados</h1>
+        <div class="sub" id="periodLabel">Cargando datos…</div>
+      </div>
+    </div>
+    <div class="status" id="dataStamp"></div>
+  </div>
+</header>
+<div class="wrap">
+
+  <div class="bar" role="group" aria-label="Filtros">
+    <div class="seg" id="periodSeg">
+      <button type="button" data-p="W" aria-pressed="true">Semanal</button>
+      <button type="button" data-p="MTD" aria-pressed="false">MTD</button>
+      <button type="button" data-p="YTD" aria-pressed="false">YTD</button>
+    </div>
+    <label class="f" for="cut">Fecha de corte <input type="date" id="cut"></label>
+    <label class="f" for="fBanner">Banner <select id="fBanner"><option value="">Todos</option></select></label>
+    <div class="spacer"></div>
+  </div>
+
+  <section class="tiles" id="tiles"></section>
+
+  <section class="card">
+    <div class="sechead"><h2>Funnel del periodo</h2><span class="note">Base: requisiciones con fecha compromiso dentro del periodo</span></div>
+    <div class="funnel" id="funnel"></div>
+  </section>
+
+  <section class="grid2">
+    <div class="card">
+      <div class="sechead"><h2>Cobertura en SLA y desviación en días</h2></div>
+      <div class="stat3" id="slaStats"></div>
+      <div class="legend" style="margin-bottom:6px"><span><i style="background:var(--p338-dk)"></i>Anticipada / en fecha (superávit)</span><span><i style="background:var(--crit)"></i>Tardía (déficit)</span></div>
+      <div class="dev" id="devChart"></div>
+      <div class="xl" id="devX"></div>
+      <div class="note" style="margin-top:6px">Días = fecha de la última entrega − fecha compromiso. Número de requisiciones por día de desviación.</div>
+    </div>
+    <div class="card">
+      <div class="sechead"><h2>Adherencia al horario requerido</h2></div>
+      <div class="tscroll" style="max-height:none"><table id="adhTable"></table></div>
+      <div class="note" style="margin-top:8px">Lo entregado en un horario distinto al solicitado no cuenta como entrega.</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="sechead"><h2>Total recluta entregada a Capacitación</h2><span class="note">Por fecha de entrega · incluye todas las personas entregadas</span></div>
+    <div class="grid3">
+      <div><div class="sub" style="margin-bottom:8px;font-weight:600">Por banner / campaña</div><div class="hbars" id="byBanner"></div></div>
+      <div><div class="sub" style="margin-bottom:8px;font-weight:600">Por horario entregado</div><div class="hbars" id="byHorario"></div></div>
+      <div>
+        <div class="sub" style="margin-bottom:4px;font-weight:600" id="monthTitle">Por mes</div>
+        <div class="legend"><span><i style="background:var(--s1)"></i>En horario requerido</span><span><i style="background:var(--p338)"></i>Otro horario</span></div>
+        <div class="cols" id="byMonth"></div><div class="xl" id="byMonthX"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="sechead">
+      <h2>Detalle por ID de requisición</h2>
+      <label class="f" for="onlyDev"><input type="checkbox" id="onlyDev"> Solo requisiciones con desvío</label>
+    </div>
+    <div class="tscroll"><table id="detail"></table></div>
+  </section>
+  <div class="note">Definiciones: Cobertura = entregado en horario requerido ÷ requerido. Cobertura en SLA = de lo válido, lo entregado en la fecha compromiso o antes. Adherencia = entregado en horario requerido ÷ entregado total. Semanal = lunes a domingo de la semana de la fecha de corte.</div>
+</div>
+<footer class="foot"><img src="assets/logo-binomia-slogan.svg" alt="BINOMIA meaningful conexions"><span class="note">Reclutamiento · Transformación Digital</span></footer>
+<div id="tip" role="tooltip"></div>
+
+<script>
+(function(){
+"use strict";
+const COLL = "reclutamiento";
+const CHUNK = 400;
+const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+const $ = s => document.querySelector(s);
+const fmt = n => (Math.round(n)).toLocaleString("es-MX");
+const pct = (n,d=1) => isFinite(n) ? (n*100).toFixed(d)+"%" : "–";
+const esc = s => String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------- dates as YYYY-MM-DD strings ---------- */
+const pad = n => String(n).padStart(2,"0");
+const iso = (y,m,d) => y+"-"+pad(m)+"-"+pad(d);
+const todayISO = (()=>{const t=new Date();return iso(t.getFullYear(),t.getMonth()+1,t.getDate());})();
+const toUTC = s => {const [y,m,d]=s.split("-").map(Number);return Date.UTC(y,m-1,d);};
+const fromUTC = t => {const d=new Date(t);return iso(d.getUTCFullYear(),d.getUTCMonth()+1,d.getUTCDate());};
+const addDays = (s,n) => fromUTC(toUTC(s)+n*864e5);
+const diffDays = (a,b) => Math.round((toUTC(a)-toUTC(b))/864e5);
+const dmy = s => s ? s.slice(8,10)+"/"+s.slice(5,7)+"/"+s.slice(0,4) : "";
+function isoWeek(s){const t=new Date(toUTC(s));const day=(t.getUTCDay()+6)%7;t.setUTCDate(t.getUTCDate()-day+3);const fy=t.getUTCFullYear();const f=new Date(Date.UTC(fy,0,4));return 1+Math.round(((t-f)/864e5-3+((f.getUTCDay()+6)%7))/7);}
+
+/* ---------- state ---------- */
+const st = { rows: [], meta: null, period: "W", cut: todayISO, banner: "", onlyDev: false };
+try{ const p=localStorage.getItem("rec_period"); if(p) st.period=p; }catch(e){}
+
+/* ---------- derive per-row metrics (same rules as the Excel) ---------- */
+function derive(r){
+  const c1=+r.c1||0, c2=+r.c2||0, req=+r.req||0;
+  const ok1 = r.h1 && r.h1===r.hreq, ok2 = r.h2 && r.h2===r.hreq;
+  const total=c1+c2, valid=(ok1?c1:0)+(ok2?c2:0), off=total-valid;
+  const inSla=(ok1&&r.f1&&r.f1<=r.fcomp?c1:0)+(ok2&&r.f2&&r.f2<=r.fcomp?c2:0);
+  const last = [r.f1,r.f2].filter(Boolean).sort().pop()||null;
+  const dev = (last && r.fcomp) ? diffDays(last,r.fcomp) : null;
+  let status;
+  if(total===0) status = (todayISO>r.fcomp) ? "Vencida sin entrega" : "Pendiente";
+  else if(inSla>=req) status="Cumplida en SLA";
+  else if(valid>=req) status="Cumplida fuera de SLA";
+  else status="Incompleta";
+  const offH=[]; if(c1>0&&r.h1!==r.hreq) offH.push(r.h1); if(c2>0&&r.h2!==r.hreq&&!offH.includes(r.h2)) offH.push(r.h2);
+  return Object.assign({},r,{c1,c2,req,total,valid,off,inSla,outSla:valid-inSla,cov:req?valid/req:null,delta:valid-req,last,dev,status,offH});
+}
+
+function periodRange(){
+  const c=st.cut;
+  if(st.period==="W"){const wd=(new Date(toUTC(c)).getUTCDay()+6)%7;const a=addDays(c,-wd);return [a,addDays(a,6)];}
+  if(st.period==="MTD") return [c.slice(0,8)+"01",c];
+  return [c.slice(0,5)+"01-01",c];
+}
+
+/* ---------- rendering ---------- */
+function stateOf(v,goal,warnAt){ if(v==null||!isFinite(v)) return "neu"; return v>=goal?"good":(v>=warnAt?"warn":"crit"); }
+const stateColor = {good:"var(--good)",warn:"var(--warn)",crit:"var(--crit)",neu:"var(--line)"};
+const stateText = {good:"✔ Cumple",warn:"▲ En riesgo",crit:"✖ Déficit",neu:"Sin datos"};
+
+function render(){
+  const [a,b]=periodRange();
+  const plabel={W:"Semana "+isoWeek(st.cut)+" ("+dmy(a)+" – "+dmy(b)+")",MTD:"Mes a la fecha ("+dmy(a)+" – "+dmy(b)+")",YTD:"Año a la fecha ("+dmy(a)+" – "+dmy(b)+")"}[st.period];
+  $("#periodLabel").textContent = plabel + (st.banner?" · "+st.banner:"");
+  const all = st.rows.map(derive).filter(r=>!st.banner||r.banner===st.banner);
+  const P = all.filter(r=>r.fcomp>=a&&r.fcomp<=b);
+  const S = k => P.reduce((s,r)=>s+(r[k]||0),0);
+  const req=S("req"), total=S("total"), valid=S("valid"), off=S("off"), inSla=S("inSla"), outSla=S("outSla");
+  const cov=req?valid/req:NaN, slaPct=valid?inSla/valid:NaN, adh=total?valid/total:NaN;
+  const devs=P.filter(r=>r.dev!=null).map(r=>r.dev);
+  const avgDev=devs.length?devs.reduce((s,x)=>s+x,0)/devs.length:null;
+  const defic=devs.filter(x=>x>0).reduce((s,x)=>s+x,0), superav=-devs.filter(x=>x<0).reduce((s,x)=>s+x,0);
+  // recluta by delivery date
+  const dl=[]; all.forEach(r=>{ if(r.f1&&r.c1) dl.push({f:r.f1,n:r.c1,h:r.h1,ok:r.h1===r.hreq,b:r.banner}); if(r.f2&&r.c2) dl.push({f:r.f2,n:r.c2,h:r.h2,ok:r.h2===r.hreq,b:r.banner}); });
+  const DP=dl.filter(d=>d.f>=a&&d.f<=b); const rec=DP.reduce((s,d)=>s+d.n,0); const recOk=DP.filter(d=>d.ok).reduce((s,d)=>s+d.n,0);
+
+  /* tiles */
+  const sCov=stateOf(cov,1,.9), sSla=stateOf(slaPct,.95,.85), sAdh=stateOf(adh,.95,.85);
+  $("#tiles").innerHTML = [
+    `<div class="card tile" style="--state:${stateColor[sCov]}"><div class="lab">Tasa de cobertura</div>
+      <div class="big">${pct(cov)}</div>
+      <div class="meter" data-tip="Cumplimiento ${pct(cov)} vs meta 100%"><i style="width:${Math.min(100,(cov||0)*100)}%;background:${stateColor[sCov]}"></i><b></b></div>
+      <div class="det"><span class="pill ${sCov}">${stateText[sCov]}</span> Delta <b>${valid-req>=0?"+":""}${fmt(valid-req)}</b> pers. (${req?(cov-1>=0?"+":"")+pct(cov-1):"–"})<br>${fmt(valid)} válidos de ${fmt(req)} requeridos</div></div>`,
+    `<div class="card tile" style="--state:${stateColor[sSla]}"><div class="lab">Cobertura en SLA</div>
+      <div class="big">${pct(slaPct)}</div>
+      <div class="meter stack" data-tip="En SLA ${fmt(inSla)} · Fuera de SLA ${fmt(outSla)}">${valid?`<span style="width:${inSla/valid*100}%;background:var(--p338-dk)"></span><span style="width:${outSla/valid*100}%;background:var(--crit)"></span>`:""}</div>
+      <div class="det">${fmt(inSla)} en tiempo · ${fmt(outSla)} fuera de tiempo<br>Desviación promedio: <b>${avgDev==null?"–":(avgDev>0?"Déficit "+avgDev.toFixed(1)+" días":avgDev<0?"Superávit "+(-avgDev).toFixed(1)+" días":"En fecha")}</b></div></div>`,
+    `<div class="card tile" style="--state:${stateColor[sAdh]}"><div class="lab">Adherencia al horario</div>
+      <div class="big">${pct(adh)}</div>
+      <div class="meter" data-tip="Adherencia ${pct(adh)} vs meta 100%"><i style="width:${Math.min(100,(adh||0)*100)}%;background:${stateColor[sAdh]}"></i><b></b></div>
+      <div class="det"><span class="pill ${sAdh}">${sAdh==="good"?"✔ Cumple":sAdh==="neu"?"Sin datos":"✖ Desvío"}</span> ${fmt(off)} pers. en otro horario<br>${P.filter(r=>r.off>0).length} requisiciones con desvío</div></div>`,
+    `<div class="card tile" style="--state:var(--s1)"><div class="lab">Total recluta del periodo</div>
+      <div class="big">${fmt(rec)}</div>
+      <div class="meter stack" data-tip="En horario ${fmt(recOk)} · Otro horario ${fmt(rec-recOk)}">${rec?`<span style="width:${recOk/rec*100}%;background:var(--s1)"></span><span style="width:${(rec-recOk)/rec*100}%;background:var(--p338)"></span>`:""}</div>
+      <div class="det">Personas entregadas a Capacitación<br>${fmt(recOk)} en horario requerido · ${fmt(rec-recOk)} en otro</div></div>`
+  ].join("");
+
+  /* funnel */
+  const stages=[["Requerido","Solicitado en requisiciones",req,"var(--p3035)"],["Entregado total","Todas las personas entregadas",total,"var(--p3035-80)"],["Entregado en horario","Entrega válida",valid,"var(--p3035-60)"],["Válido y en SLA","En horario y a tiempo",inSla,"var(--p338-dk)"]];
+  const mx=Math.max(1,...stages.map(s=>s[2]));
+  let fh=""; stages.forEach((s,i)=>{
+    const w=s[2]/mx*100, p=req?s[2]/req:NaN;
+    if(i>0){const prev=stages[i-1][2];const diff=s[2]-prev;fh+=`<div class="fstage"><div></div><div class="fdrop">${diff===0?"= sin cambio":diff<0?"▼ "+fmt(-diff)+" pers. ("+(prev?pct(-diff/prev,0):"–")+")":"▲ +"+fmt(diff)+" pers."}</div><div></div></div>`;}
+    fh+=`<div class="fstage"><div class="nm">${s[0]}<small>${s[1]}</small></div><div class="ftrack"><div class="fbar" style="width:${Math.max(w,4)}%;background:${s[3]}" data-tip="${s[0]}: ${fmt(s[2])} personas · ${pct(p)} vs requerido">${fmt(s[2])}</div></div><div class="pc">${i===0?"100%":pct(p)}<small>vs requerido</small></div></div>`;
+  });
+  $("#funnel").innerHTML = req||total? fh : `<div class="empty">No hay requisiciones con fecha compromiso en este periodo.</div>`;
+
+  /* SLA stats + deviation distribution */
+  const onTime=P.filter(r=>r.dev!=null&&r.dev<=0).length, late=P.filter(r=>r.dev!=null&&r.dev>0).length, pend=P.filter(r=>r.dev==null).length;
+  $("#slaStats").innerHTML=`<div><b>${onTime}</b><span>Requisiciones en fecha o anticipadas</span></div><div><b style="color:var(--crit-ink)">${late}</b><span>Requisiciones con entrega tardía</span></div><div><b style="color:var(--crit-ink)">${fmt(defic)}</b><span>Días acumulados de déficit</span></div><div><b style="color:var(--good-ink)">${fmt(superav)}</b><span>Días acumulados de superávit</span></div>` + (pend?`<div style="grid-column:1/-1"><span>${pend} requisiciones aún sin entrega</span></div>`:"");
+  const lo=Math.max(-7,Math.min(-3,...devs)), hi=Math.min(10,Math.max(3,...devs));
+  const bins=[]; for(let d=lo;d<=hi;d++) bins.push({d,n:devs.filter(x=>(d===lo?x<=d:d===hi?x>=d:x===d)).length});
+  const bm=Math.max(1,...bins.map(x=>x.n));
+  $("#devChart").innerHTML=bins.map(x=>`<div class="col" data-tip="${x.d===0?"En fecha":x.d<0?(x.d===lo?"≤ ":"")+(-x.d)+" días antes":(x.d===hi?"≥ ":"")+x.d+" días tarde"}: ${x.n} requisiciones"><div class="val">${x.n||""}</div><div class="stk"><span style="height:${x.n/bm*90}px;background:${x.d>0?"var(--crit)":"var(--p338-dk)"};border-radius:3px 3px 0 0"></span></div></div>`).join("");
+  $("#devX").innerHTML=bins.map(x=>`<span>${x.d>0?"+":""}${x.d}</span>`).join("");
+
+  /* adherence by horario */
+  const hs=[...new Set(st.rows.map(r=>r.hreq).filter(Boolean))];
+  let ah=`<thead><tr><th>Horario requerido</th><th class="n">Requerido</th><th class="n">En horario</th><th class="n">Otro horario</th><th class="n">Adherencia</th><th class="n">Cobertura</th></tr></thead><tbody>`;
+  hs.forEach(h=>{const R=P.filter(r=>r.hreq===h);const q=R.reduce((s,r)=>s+r.req,0),v=R.reduce((s,r)=>s+r.valid,0),o=R.reduce((s,r)=>s+r.off,0);
+    if(!q&&!v&&!o) return; const ad=(v+o)?v/(v+o):NaN, cv=q?v/q:NaN; const sa=stateOf(ad,.95,.85), sc=stateOf(cv,1,.9);
+    const det=[...new Set(R.flatMap(r=>r.offH))].join(", ");
+    ah+=`<tr><td><b>${esc(h)}</b>${o?`<br><span class="note">Desvío hacia: ${esc(det)}</span>`:""}</td><td class="n">${fmt(q)}</td><td class="n">${fmt(v)}</td><td class="n">${o?`<span class="pill crit">${fmt(o)}</span>`:"0"}</td><td class="n"><span class="pill ${sa}">${pct(ad,0)}</span></td><td class="n">${pct(cv,0)}<span class="mini"><i style="width:${Math.min(100,(cv||0)*100)}%;background:${stateColor[sc]}"></i></span></td></tr>`;});
+  ah+=`<tr><td><b>Total</b></td><td class="n"><b>${fmt(req)}</b></td><td class="n"><b>${fmt(valid)}</b></td><td class="n"><b>${fmt(off)}</b></td><td class="n"><b>${pct(adh,0)}</b></td><td class="n"><b>${pct(cov,0)}</b></td></tr></tbody>`;
+  $("#adhTable").innerHTML=ah;
+
+  /* recluta breakdowns */
+  const group=(key)=>{const m=new Map();DP.forEach(d=>m.set(d[key],(m.get(d[key])||0)+d.n));return [...m.entries()].sort((x,y)=>y[1]-x[1]);};
+  const hb=(arr,color)=>{const m=Math.max(1,...arr.map(x=>x[1]));return arr.length?arr.map(([k,n])=>`<div class="hrow" data-tip="${esc(k)}: ${fmt(n)} personas (${pct(rec?n/rec:0,0)} del total)"><span>${esc(k)}</span><div class="t"><i style="width:${n/m*100}%;background:${color}"></i></div><span class="v">${fmt(n)} <small>${pct(rec?n/rec:0,0)}</small></span></div>`).join(""):`<div class="note">Sin entregas en el periodo.</div>`;};
+  $("#byBanner").innerHTML=hb(group("b"),"var(--s1)");
+  $("#byHorario").innerHTML=hb(group("h"),"var(--p338-dk)");
+  const yr=st.cut.slice(0,4), cm=+st.cut.slice(5,7);
+  $("#monthTitle").textContent="Por mes · "+yr;
+  const months=MESES.map((m,i)=>{const pre=yr+"-"+pad(i+1);const D=dl.filter(d=>d.f.startsWith(pre));const ok=D.filter(d=>d.ok).reduce((s,d)=>s+d.n,0);const tot=D.reduce((s,d)=>s+d.n,0);return {m,ok,oth:tot-ok,tot};});
+  const mm=Math.max(1,...months.map(x=>x.tot));
+  $("#byMonth").innerHTML=months.map((x,i)=>`<div class="col${i+1===cm?" cur":""}" data-tip="${x.m} ${yr}: ${fmt(x.tot)} entregados · ${fmt(x.ok)} en horario · ${fmt(x.oth)} otro horario"><div class="val">${x.tot?fmt(x.tot):""}</div><div class="stk"><span style="height:${x.oth/mm*150}px;background:var(--p338)"></span><span style="height:${x.ok/mm*150}px;background:var(--s1);${x.oth?"":"border-radius:4px 4px 0 0"}"></span></div></div>`).join("");
+  $("#byMonthX").innerHTML=months.map(x=>`<span>${x.m}</span>`).join("");
+
+  /* detail */
+  const D=(st.onlyDev?P.filter(r=>r.off>0||(r.dev!=null&&r.dev>0)||r.status!=="Cumplida en SLA"):P).slice().sort((x,y)=>x.fcomp<y.fcomp?-1:x.fcomp>y.fcomp?1:x.id<y.id?-1:1);
+  const sp={"Cumplida en SLA":"good","Cumplida fuera de SLA":"warn","Pendiente":"neu","Incompleta":"crit","Vencida sin entrega":"crit"};
+  let dt=`<thead><tr><th>ID requisición</th><th>Banner</th><th>Horario req.</th><th class="n">Req.</th><th class="n">Entregado</th><th class="n">Válido</th><th class="n">Cobertura</th><th>Compromiso</th><th>Entregas</th><th>SLA (días)</th><th>Horario</th><th>Estatus</th></tr></thead><tbody>`;
+  D.forEach(r=>{
+    const devTxt=r.dev==null?`<span class="pill neu">Sin entrega</span>`:r.dev>0?`<span class="pill crit">Déficit ${r.dev}</span>`:r.dev<0?`<span class="pill good">Superávit ${-r.dev}</span>`:`<span class="pill good">En fecha</span>`;
+    const hTxt=r.total===0?"–":r.off===0?`<span class="pill good">Cumple</span>`:`<span class="pill crit">${r.off} en ${esc(r.offH.join(" / "))}</span>`;
+    const ent=[r.f1?dmy(r.f1)+" · "+r.c1+" "+esc(r.h1||""):"",r.f2?dmy(r.f2)+" · "+r.c2+" "+esc(r.h2||""):""].filter(Boolean).join("<br>")||"–";
+    dt+=`<tr><td><b>${esc(r.id)}</b></td><td>${esc(r.banner)}</td><td>${esc(r.hreq)}</td><td class="n">${r.req}</td><td class="n">${r.total}</td><td class="n">${r.valid}</td><td class="n">${r.cov==null?"–":pct(r.cov,0)}</td><td>${dmy(r.fcomp)}</td><td style="white-space:nowrap;font-size:12px">${ent}</td><td>${devTxt}</td><td>${hTxt}</td><td><span class="pill ${sp[r.status]}">${r.status}</span></td></tr>`;
+  });
+  dt+="</tbody>";
+  $("#detail").innerHTML=D.length?dt:`<tbody><tr><td class="empty">No hay requisiciones para mostrar en este periodo.</td></tr></tbody>`;
+}
+
+/* ---------- controls ---------- */
+function syncControls(){
+  document.querySelectorAll("#periodSeg button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.p===st.period)));
+  $("#cut").value=st.cut;
+  const sel=$("#fBanner"), cur=st.banner, bs=[...new Set(st.rows.map(r=>r.banner).filter(Boolean))].sort();
+  sel.innerHTML=`<option value="">Todos</option>`+bs.map(b=>`<option${b===cur?" selected":""}>${esc(b)}</option>`).join("");
+}
+$("#periodSeg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;st.period=b.dataset.p;try{localStorage.setItem("rec_period",st.period);}catch(err){}syncControls();render();});
+$("#cut").addEventListener("change",e=>{if(e.target.value){st.cut=e.target.value;render();}});
+$("#fBanner").addEventListener("change",e=>{st.banner=e.target.value;render();});
+$("#onlyDev").addEventListener("change",e=>{st.onlyDev=e.target.checked;render();});
+
+/* tooltip */
+const tip=$("#tip");
+document.addEventListener("mousemove",e=>{const t=e.target.closest("[data-tip]");if(!t){tip.style.opacity=0;return;}tip.textContent=t.dataset.tip;tip.style.opacity=1;const x=Math.min(e.clientX+14,window.innerWidth-tip.offsetWidth-8);tip.style.left=x+"px";tip.style.top=(e.clientY+14)+"px";});
+
+const fromArr=a=>({id:a[0],fsol:a[1],banner:a[2],puesto:a[3],hreq:a[4],req:a[5],fcomp:a[6],f1:a[7],c1:a[8],h1:a[9],f2:a[10],c2:a[11],h2:a[12],rec:a[13],com:a[14]});
+function setStamp(){
+  const m=st.meta; $("#dataStamp").innerHTML = m ? `Datos al <b>${esc(new Date(m.updatedAt).toLocaleString("es-MX",{dateStyle:"medium",timeStyle:"short",timeZone:"America/Mexico_City"}))}</b> · ${m.count} requisiciones` : "";
+}
+let lastVersion=null;
+async function load(){
+  try{
+    const r=await fetch("data/datos.json?t="+Date.now(),{cache:"no-store"});
+    if(!r.ok) throw new Error(r.status);
+    const j=await r.json();
+    if(j.meta && j.meta.version===lastVersion) return;
+    lastVersion=j.meta&&j.meta.version;
+    st.rows=(j.rows||[]).map(fromArr); st.meta=j.meta||null;
+    setStamp(); syncControls(); render();
+  }catch(e){
+    if(!st.meta) $("#periodLabel").textContent="No se pudieron cargar los datos. Intente recargar la página.";
+  }
+}
+syncControls(); render();
+$("#periodLabel").textContent="Cargando datos…";
+load();
+setInterval(load, 5*60*1000);
+})();
+</script>
+</body>
+</html>
