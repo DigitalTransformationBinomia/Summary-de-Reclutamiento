@@ -79,6 +79,37 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .grid2{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:14px}
 .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .sechead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+/* KPI v2 */
+.kpi{position:relative;display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-content:start;border-top:4px solid var(--state,var(--line));cursor:pointer;transition:box-shadow .2s,transform .2s;text-align:left;font:inherit;color:inherit;width:100%}
+.kpi:hover{box-shadow:0 6px 20px rgba(0,62,82,.10);transform:translateY(-2px)}
+.kpi:focus-visible{outline:2px solid var(--p338-dk);outline-offset:2px}
+.kpi[aria-expanded="true"]{box-shadow:0 0 0 2px var(--p3035) inset}
+.kpi .lab{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;font:600 11.5px var(--body);text-transform:uppercase;letter-spacing:.6px;color:var(--ink-2)}
+.kpi .lab .more{font:600 11px var(--body);text-transform:none;letter-spacing:0;color:var(--p338-dk)}
+.kpi .val{font:300 40px/1 var(--display);color:var(--p3035)}
+.kpi .sub{font-size:12px;color:var(--ink-2);margin-top:4px}
+.kpi .gauge{width:96px;height:58px}
+.kpi .gauge .tr{stroke:var(--track)}.kpi .gauge .tg{stroke:var(--ink)}
+.kpi .row{grid-column:1/-1;display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-top:6px}
+.delta{font:600 12px var(--body);display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px}
+.delta.up{background:#E3F3EE;color:var(--good-ink)}.delta.down{background:#FBE9E8;color:var(--crit-ink)}.delta.flat{background:var(--chip);color:var(--ink-2)}
+.delta{white-space:nowrap}.dctx{font-size:11px;color:var(--muted)}
+.spark{width:110px;height:34px;overflow:visible;flex:none}
+.spark path.l{fill:none;stroke:var(--p3035);stroke-width:2}
+.spark path.a{fill:var(--p338);opacity:.25}
+.spark circle{fill:var(--p3035);stroke:#fff;stroke-width:2}
+@keyframes gfill{from{stroke-dashoffset:var(--len)}}
+.gauge .gv{animation:gfill .9s cubic-bezier(.2,.8,.2,1) both}
+@media (prefers-reduced-motion:reduce){.gauge .gv{animation:none}.kpi{transition:none}}
+.kdrawer{display:none;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(220px,.8fr);gap:22px}
+.kdrawer.open{display:grid}
+.kdrawer h3{font:300 18px var(--display);color:var(--p3035);margin:0 0 10px}
+.kdrawer .eyebrow{font:600 11px var(--body);letter-spacing:.8px;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.kdrawer .close{justify-self:end;font:600 12px var(--body);border:1px solid var(--base);background:var(--surface);border-radius:99px;padding:5px 12px;cursor:pointer;color:var(--ink-2)}
+.kdrawer .note2{font-size:12.5px;color:var(--ink-2);line-height:1.5}
+.trend{display:flex;align-items:flex-end;gap:4px;height:120px;border-bottom:1px solid var(--base)}
+.trend .col .stk{width:70%}
+@media (max-width:980px){.kdrawer{grid-template-columns:1fr}}
 /* funnel v2 */
 .fwrap{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(260px,1fr);gap:24px;align-items:start}
 #funnelSvg{width:100%;height:auto;display:block;overflow:visible}
@@ -189,6 +220,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
   </div>
 
   <section class="tiles" id="tiles"></section>
+  <section class="card kdrawer" id="kdrawer" aria-live="polite"></section>
 
   <section class="card">
     <div class="sechead"><h2>Funnel del periodo</h2><span class="note">Base: requisiciones con fecha compromiso dentro del periodo</span></div>
@@ -279,6 +311,100 @@ function derive(r){
   return Object.assign({},r,{c1,c2,req,total,valid,off,inSla,outSla:valid-inSla,cov:req?valid/req:null,delta:valid-req,last,dev,status,offH});
 }
 
+let kOpen=null;
+function kpiCalc(rows,a,b){
+  const P=rows.filter(r=>r.fcomp>=a&&r.fcomp<=b), S=k=>P.reduce((s,r)=>s+(r[k]||0),0);
+  const req=S("req"),total=S("total"),valid=S("valid"),inSla=S("inSla"),off=S("off");
+  const devs=P.filter(r=>r.dev!=null).map(r=>r.dev);
+  let rec=0,recOk=0; rows.forEach(r=>{[[r.f1,r.c1,r.h1],[r.f2,r.c2,r.h2]].forEach(([f,c,h])=>{if(f&&c&&f>=a&&f<=b){rec+=c;if(h===r.hreq)recOk+=c;}});});
+  return {P,req,total,valid,inSla,outSla:valid-inSla,off,rec,recOk,cov:req?valid/req:NaN,sla:valid?inSla/valid:NaN,adh:total?valid/total:NaN,
+    avgDev:devs.length?devs.reduce((s,x)=>s+x,0)/devs.length:null,late:devs.filter(x=>x>0).length,n:P.length};
+}
+function prevRange(a,b){
+  if(st.period==="W") return [addDays(a,-7),addDays(b,-7)];
+  if(st.period==="MTD"){const y=+a.slice(0,4),m=+a.slice(5,7);const py=m===1?y-1:y,pm=m===1?12:m-1;const last=new Date(Date.UTC(py,pm,0)).getUTCDate();return [iso(py,pm,1),iso(py,pm,Math.min(+b.slice(8,10),last))];}
+  return [(+a.slice(0,4)-1)+a.slice(4),(+b.slice(0,4)-1)+b.slice(4)];
+}
+function trendRanges(a,b){
+  const out=[];
+  if(st.period==="W"){for(let i=7;i>=0;i--)out.push({a:addDays(a,-7*i),b:addDays(b,-7*i),l:"S"+isoWeek(addDays(a,-7*i))});}
+  else{const y=+st.cut.slice(0,4),m=+st.cut.slice(5,7);for(let i=7;i>=0;i--){let mm=m-i,yy=y;while(mm<1){mm+=12;yy--;}const last=new Date(Date.UTC(yy,mm,0)).getUTCDate();out.push({a:iso(yy,mm,1),b:i===0?st.cut:iso(yy,mm,last),l:MESES[mm-1]});}}
+  return out;
+}
+const KDEF={
+  cov:{t:"Tasa de cobertura",goal:1,warn:.9,f:k=>k.cov,fmt:v=>pct(v),sub:k=>`${fmt(k.valid)} válidos de ${fmt(k.req)} requeridos`,
+       extra:k=>{const d=k.valid-k.req;return `Delta <b>${d>=0?"+":""}${fmt(d)}</b> pers.`},num:"valid",den:"req",
+       help:"Personas entregadas en el horario solicitado entre las requeridas. Lo entregado en otro horario no cuenta."},
+  sla:{t:"Cobertura en SLA",goal:.95,warn:.85,f:k=>k.sla,fmt:v=>pct(v),sub:k=>`${fmt(k.inSla)} a tiempo · ${fmt(k.outSla)} tarde`,
+       extra:k=>`Desviación: <b>${k.avgDev==null?"–":k.avgDev>0?"déficit "+k.avgDev.toFixed(1)+" d":k.avgDev<0?"superávit "+(-k.avgDev).toFixed(1)+" d":"en fecha"}</b>`,num:"inSla",den:"valid",
+       help:"De lo entregado válido, cuánto llegó en la fecha compromiso o antes. Desviación = última entrega − fecha compromiso."},
+  adh:{t:"Adherencia al horario",goal:.95,warn:.85,f:k=>k.adh,fmt:v=>pct(v),sub:k=>`${fmt(k.off)} pers. en otro horario`,
+       extra:k=>`${k.P.filter(r=>r.off>0).length} requisiciones con desvío`,num:"valid",den:"total",
+       help:"Entregado en el horario solicitado entre el total entregado."},
+  rec:{t:"Total recluta",goal:null,f:k=>k.rec,fmt:v=>fmt(v),sub:k=>`Entregados a Capacitación`,
+       extra:k=>`${fmt(k.recOk)} en horario · ${fmt(k.rec-k.recOk)} en otro`,
+       help:"Personas entregadas a Capacitación de nuevo ingreso, por fecha de entrega."}
+};
+function gaugeSVG(v,goal,color){
+  const R=40,C=Math.PI*R,frac=isFinite(v)?Math.max(0,Math.min(1,v)):0,len=C;
+  const ga=Math.PI*(1-Math.min(1,goal)), gx=48+R*Math.cos(ga), gy=50-R*Math.sin(ga), gx2=48+(R+9)*Math.cos(ga), gy2=50-(R+9)*Math.sin(ga);
+  return `<svg class="gauge" viewBox="0 0 96 58" aria-hidden="true"><path class="tr" d="M8,50 A40,40 0 0 1 88,50" fill="none" stroke-width="10" stroke-linecap="round"/>
+  <path class="gv" d="M8,50 A40,40 0 0 1 88,50" fill="none" stroke="${color}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${len}" stroke-dashoffset="${len*(1-frac)}" style="--len:${len}"/>
+  <line class="tg" x1="${gx.toFixed(1)}" y1="${gy.toFixed(1)}" x2="${gx2.toFixed(1)}" y2="${gy2.toFixed(1)}" stroke-width="2"/></svg>`;
+}
+function sparkSVG(arr){
+  let v=arr.map(x=>isFinite(x)?x:null); const fi=v.findIndex(x=>x!=null); if(fi>0) v=v.slice(fi); const nums=v.filter(x=>x!=null); if(nums.length<2) return `<svg class="spark"></svg>`;
+  const mx=Math.max(...nums),mn=Math.min(0,...nums),W=110,H=34,step=W/(v.length-1),y=x=>H-(x-mn)/((mx-mn)||1)*(H-4)-2;
+  let d="",started=false; v.forEach((x,i)=>{if(x==null)return;d+=(started?"L":"M")+(i*step).toFixed(1)+","+y(x).toFixed(1);started=true;});
+  const li=v.length-1, lv=v[li]; const firstI=v.findIndex(x=>x!=null);
+  const area=d+`L${(li*step).toFixed(1)},${H} L${(firstI*step).toFixed(1)},${H} Z`;
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" aria-hidden="true"><path class="a" d="${area}"/><path class="l" d="${d}"/>${lv!=null?`<circle cx="${(li*step).toFixed(1)}" cy="${y(lv).toFixed(1)}" r="3.5"/>`:""}</svg>`;
+}
+function renderKPIs(all,a,b){
+  const cur=kpiCalc(all,a,b), [pa,pb]=prevRange(a,b), prev=kpiCalc(all,pa,pb), tr=trendRanges(a,b).map(r=>({...r,k:kpiCalc(all,r.a,r.b)}));
+  const plab={W:"vs semana anterior",MTD:"vs mismo corte mes anterior",YTD:"vs mismo corte año anterior"}[st.period];
+  const html=Object.entries(KDEF).map(([id,D])=>{
+    const v=D.f(cur), pv=D.f(prev), stt=D.goal==null?"neu":stateOf(v,D.goal,D.warn);
+    const col=D.goal==null?"var(--p3035)":stateColor[stt];
+    let dl=`<span class="delta flat">sin dato previo</span>`;
+    if(isFinite(v)&&isFinite(pv)&&(D.goal!=null||pv>0)){
+      const diff=D.goal==null?(v-pv)/pv:(v-pv); const up=diff>0.0005, dn=diff<-0.0005;
+      const txt=D.goal==null?(diff>=0?"+":"")+(diff*100).toFixed(0)+"%":(diff>=0?"+":"")+(diff*100).toFixed(1)+" pts";
+      dl=`<span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span class="delta ${up?"up":dn?"down":"flat"}">${up?"▲":dn?"▼":"="} ${txt}</span><span class="dctx">${plab}</span></span>`;
+    }
+    const spark=sparkSVG(tr.map(r=>D.f(r.k)));
+    return `<button type="button" class="card kpi" data-k="${id}" aria-expanded="${kOpen===id}" aria-controls="kdrawer" style="--state:${D.goal==null?"var(--p3035)":stateColor[stt]}" data-tip="${D.help}">
+      <div class="lab"><span>${D.t}</span><span class="more">${kOpen===id?"Cerrar ▴":"Ver detalle ▾"}</span></div>
+      <div><div class="val">${D.fmt(v)}</div><div class="sub">${D.sub(cur)}</div></div>
+      ${D.goal!=null?gaugeSVG(v,D.goal,col):`<div style="align-self:end;text-align:right"><span class="pill neu">${fmt(cur.n)} requisiciones</span></div>`}
+      <div class="row"><div style="display:grid;gap:6px;justify-items:start">${D.goal!=null?`<span class="pill ${stt}" style="justify-self:start">${stateText[stt]} · meta ${pct(D.goal,0)}</span>`:""}<span class="sub" style="margin:0">${D.extra(cur)}</span>${dl}</div>${spark}</div>
+    </button>`;
+  }).join("");
+  $("#tiles").innerHTML=html;
+  $("#tiles").querySelectorAll(".kpi").forEach(el=>el.addEventListener("click",()=>{kOpen=kOpen===el.dataset.k?null:el.dataset.k;renderKPIs(all,a,b);if(kOpen)$("#kdrawer").scrollIntoView({block:"nearest",behavior:"smooth"});}));
+  drawDrawer(cur,tr);
+}
+function drawDrawer(cur,tr){
+  const box=$("#kdrawer"); if(!kOpen){box.classList.remove("open");box.innerHTML="";return;}
+  const D=KDEF[kOpen]; box.classList.add("open");
+  const grp=(key)=>{const m=new Map();
+    if(kOpen==="rec"){cur.P;}
+    const rows=cur.P; rows.forEach(r=>{const g=r[key]||"—";const o=m.get(g)||{req:0,total:0,valid:0,inSla:0,off:0};["req","total","valid","inSla","off"].forEach(x=>o[x]+=r[x]||0);m.set(g,o);});
+    return [...m.entries()];};
+  const bars=(arr)=>{
+    if(kOpen==="rec"){const mx=Math.max(1,...arr.map(x=>x[1].total));return arr.sort((x,y)=>y[1].total-x[1].total).map(([g,o])=>`<div class="bbr" data-tip="${esc(g)}: ${fmt(o.total)} entregados de ${fmt(o.req)} requeridos"><span>${esc(g)}</span><div class="t"><i style="width:${o.total/mx*100}%;background:var(--p3035)"></i></div><span class="v">${fmt(o.total)}</span></div>`).join("");}
+    const val=o=>o[D.den]?o[D.num]/o[D.den]:NaN;
+    return arr.sort((x,y)=>(val(x[1])||0)-(val(y[1])||0)).map(([g,o])=>{const v=val(o),sc=stateOf(v,D.goal,D.warn);
+      return `<div class="bbr" data-tip="${esc(g)}: ${fmt(o[D.num])} de ${fmt(o[D.den])} (${pct(v)})"><span>${esc(g)}</span><div class="t"><i style="width:${Math.min(100,(v||0)/1.2*100)}%;background:${stateColor[sc]}"></i><u style="left:${D.goal/1.2*100}%"></u></div><span class="v">${pct(v,0)}</span></div>`;}).join("")||`<div class="note2">Sin datos en el periodo.</div>`;
+  };
+  const tm=Math.max(1e-9,...tr.map(r=>{const x=D.f(r.k);return isFinite(x)?x:0;}));
+  const trend=`<div class="trend">${tr.map((r,i)=>{const x=D.f(r.k);const h=isFinite(x)?x/tm*100:0;return `<div class="col${i===tr.length-1?" cur":""}" data-tip="${r.l}: ${isFinite(x)?D.fmt(x):"sin datos"}"><div class="val">${isFinite(x)?(D.goal==null?fmt(x):pct(x,0)):""}</div><div class="stk"><span style="height:${h*0.85}px;background:${i===tr.length-1?"var(--p3035)":"var(--p3035-60)"};border-radius:3px 3px 0 0"></span></div></div>`;}).join("")}</div><div class="xl">${tr.map(r=>`<span>${r.l}</span>`).join("")}</div>`;
+  box.innerHTML=`<div><h3>${D.t} por campaña</h3><div class="eyebrow">${D.goal!=null?"Ordenado de peor a mejor · la línea marca la meta":"Entregados por campaña"}</div><div class="bb">${bars(grp("banner"))}</div></div>
+    <div><h3>${D.t} por horario</h3><div class="eyebrow">${D.goal!=null?"Horario solicitado":"Horario solicitado"}</div><div class="bb">${bars(grp("hreq"))}</div></div>
+    <div style="display:grid;gap:10px;align-content:start"><button type="button" class="close" id="kclose">Cerrar ✕</button><h3 style="margin:0">Tendencia</h3><div class="eyebrow" style="margin:0">${st.period==="W"?"Últimas 8 semanas":"Últimos 8 meses"}</div>${trend}<div class="note2">${D.help}</div></div>`;
+  $("#kclose").addEventListener("click",()=>{kOpen=null;render();});
+}
+
 let fSel=3;
 function renderFunnel(P,T){
   const ST=[
@@ -362,26 +488,7 @@ function render(){
   const dl=[]; all.forEach(r=>{ if(r.f1&&r.c1) dl.push({f:r.f1,n:r.c1,h:r.h1,ok:r.h1===r.hreq,b:r.banner}); if(r.f2&&r.c2) dl.push({f:r.f2,n:r.c2,h:r.h2,ok:r.h2===r.hreq,b:r.banner}); });
   const DP=dl.filter(d=>d.f>=a&&d.f<=b); const rec=DP.reduce((s,d)=>s+d.n,0); const recOk=DP.filter(d=>d.ok).reduce((s,d)=>s+d.n,0);
 
-  /* tiles */
-  const sCov=stateOf(cov,1,.9), sSla=stateOf(slaPct,.95,.85), sAdh=stateOf(adh,.95,.85);
-  $("#tiles").innerHTML = [
-    `<div class="card tile" style="--state:${stateColor[sCov]}"><div class="lab">Tasa de cobertura</div>
-      <div class="big">${pct(cov)}</div>
-      <div class="meter" data-tip="Cumplimiento ${pct(cov)} vs meta 100%"><i style="width:${Math.min(100,(cov||0)*100)}%;background:${stateColor[sCov]}"></i><b></b></div>
-      <div class="det"><span class="pill ${sCov}">${stateText[sCov]}</span> Delta <b>${valid-req>=0?"+":""}${fmt(valid-req)}</b> pers. (${req?(cov-1>=0?"+":"")+pct(cov-1):"–"})<br>${fmt(valid)} válidos de ${fmt(req)} requeridos</div></div>`,
-    `<div class="card tile" style="--state:${stateColor[sSla]}"><div class="lab">Cobertura en SLA</div>
-      <div class="big">${pct(slaPct)}</div>
-      <div class="meter stack" data-tip="En SLA ${fmt(inSla)} · Fuera de SLA ${fmt(outSla)}">${valid?`<span style="width:${inSla/valid*100}%;background:var(--p338-dk)"></span><span style="width:${outSla/valid*100}%;background:var(--crit)"></span>`:""}</div>
-      <div class="det">${fmt(inSla)} en tiempo · ${fmt(outSla)} fuera de tiempo<br>Desviación promedio: <b>${avgDev==null?"–":(avgDev>0?"Déficit "+avgDev.toFixed(1)+" días":avgDev<0?"Superávit "+(-avgDev).toFixed(1)+" días":"En fecha")}</b></div></div>`,
-    `<div class="card tile" style="--state:${stateColor[sAdh]}"><div class="lab">Adherencia al horario</div>
-      <div class="big">${pct(adh)}</div>
-      <div class="meter" data-tip="Adherencia ${pct(adh)} vs meta 100%"><i style="width:${Math.min(100,(adh||0)*100)}%;background:${stateColor[sAdh]}"></i><b></b></div>
-      <div class="det"><span class="pill ${sAdh}">${sAdh==="good"?"✔ Cumple":sAdh==="neu"?"Sin datos":"✖ Desvío"}</span> ${fmt(off)} pers. en otro horario<br>${P.filter(r=>r.off>0).length} requisiciones con desvío</div></div>`,
-    `<div class="card tile" style="--state:var(--s1)"><div class="lab">Total recluta del periodo</div>
-      <div class="big">${fmt(rec)}</div>
-      <div class="meter stack" data-tip="En horario ${fmt(recOk)} · Otro horario ${fmt(rec-recOk)}">${rec?`<span style="width:${recOk/rec*100}%;background:var(--s1)"></span><span style="width:${(rec-recOk)/rec*100}%;background:var(--p338)"></span>`:""}</div>
-      <div class="det">Personas entregadas a Capacitación<br>${fmt(recOk)} en horario requerido · ${fmt(rec-recOk)} en otro</div></div>`
-  ].join("");
+  renderKPIs(all,a,b);
 
   /* funnel v2 */
   renderFunnel(P,{req,total,valid,inSla});
