@@ -79,7 +79,42 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .grid2{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:14px}
 .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .sechead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:12px;flex-wrap:wrap}
-/* funnel */
+/* funnel v2 */
+.fwrap{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(260px,1fr);gap:24px;align-items:start}
+#funnelSvg{width:100%;height:auto;display:block;overflow:visible}
+.fseg{cursor:pointer;outline:none}
+.fseg path{transition:opacity .2s, filter .2s}
+.fseg:hover path,.fseg:focus-visible path{filter:brightness(1.12)}
+.fseg.dim path{opacity:.35}
+.fseg.sel path{stroke:var(--p338);stroke-width:3}
+.fseg text{pointer-events:none}
+.fv{font:300 32px var(--display);fill:#fff}
+.fl{font:600 13px var(--body);fill:var(--ink)}
+.fp{font:300 22px var(--display);fill:var(--p3035)}
+.fps{font:400 11px var(--body);fill:var(--muted)}
+.leak rect{fill:#FBE9E8}.leak text{font:600 11.5px var(--body);fill:var(--crit-ink)}
+.leak.ok rect{fill:#E3F3EE}.leak.ok text{fill:var(--good-ink)}
+@keyframes fgrow{from{transform:scaleX(.15);opacity:0}to{transform:scaleX(1);opacity:1}}
+.fseg path{transform-box:fill-box;transform-origin:center;animation:fgrow .7s cubic-bezier(.2,.8,.2,1) both}
+.fseg:nth-of-type(2) path{animation-delay:.08s}.fseg:nth-of-type(3) path{animation-delay:.16s}.fseg:nth-of-type(4) path{animation-delay:.24s}
+@media (prefers-reduced-motion:reduce){.fseg path{animation:none}}
+.fside{border:1px solid var(--line);border-radius:10px;padding:16px;display:grid;gap:12px;background:linear-gradient(180deg,var(--chip),var(--surface) 40%)}
+.fside .eyebrow{font:600 11px var(--body);letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+.fside .big{font:300 44px/1 var(--display);color:var(--p3035)}
+.fside .kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fside .kpis div{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.fside .kpis b{display:block;font:300 22px var(--display);color:var(--p3035)}
+.fside .kpis span{font-size:11.5px;color:var(--ink-2)}
+.fsteps{display:flex;gap:6px;flex-wrap:wrap}
+.fsteps button{font:600 12px var(--body);padding:5px 10px;border-radius:99px;border:1px solid var(--base);background:var(--surface);color:var(--ink-2);cursor:pointer}
+.fsteps button[aria-pressed="true"]{background:var(--p3035);border-color:var(--p3035);color:#fff}
+.bb{display:grid;gap:7px}
+.bbr{display:grid;grid-template-columns:110px 1fr 64px;gap:8px;align-items:center;font-size:12.5px}
+.bbr .t{height:12px;background:var(--track);border-radius:3px;position:relative;overflow:hidden}
+.bbr .t i{position:absolute;left:0;top:0;bottom:0;border-radius:3px}
+.bbr .t u{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink)}
+.bbr .v{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+@media (max-width:860px){.fwrap{grid-template-columns:1fr}}
 .funnel{display:grid;gap:6px}
 .fstage{display:grid;grid-template-columns:200px 1fr 120px;gap:12px;align-items:center}
 .fstage .nm{font-weight:600;font-size:13px}
@@ -157,7 +192,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 
   <section class="card">
     <div class="sechead"><h2>Funnel del periodo</h2><span class="note">Base: requisiciones con fecha compromiso dentro del periodo</span></div>
-    <div class="funnel" id="funnel"></div>
+    <div class="fwrap"><div id="funnel"></div><aside class="fside" id="fside" aria-live="polite"></aside></div>
   </section>
 
   <section class="grid2">
@@ -244,6 +279,61 @@ function derive(r){
   return Object.assign({},r,{c1,c2,req,total,valid,off,inSla,outSla:valid-inSla,cov:req?valid/req:null,delta:valid-req,last,dev,status,offH});
 }
 
+let fSel=3;
+function renderFunnel(P,T){
+  const ST=[
+    {k:"req",n:"Requerido",d:"Solicitado en requisiciones",c:"#003E52"},
+    {k:"total",n:"Entregado",d:"Todas las personas entregadas",c:"#1F5568"},
+    {k:"valid",n:"En horario",d:"Entrega válida (horario solicitado)",c:"#3D7385"},
+    {k:"inSla",n:"En horario y a tiempo",d:"Válido entregado en SLA",c:"#2E8F78"}];
+  const box=$("#funnel"), side=$("#fside");
+  if(!T.req&&!T.total){box.innerHTML=`<div class="empty">No hay requisiciones con fecha compromiso en este periodo.</div>`;side.innerHTML="";return;}
+  const vals=ST.map(s=>T[s.k]), mx=Math.max(1,...vals);
+  const W=780,H=440,cx=420,maxW=430,minW=86,sh=92,gap=18,top=10;
+  const wOf=v=>minW+(maxW-minW)*(v/mx);
+  const leakTxt=["sin entregar","en otro horario","fuera de SLA"];
+  let g="";
+  ST.forEach((s,i)=>{
+    const y=top+i*(sh+gap), w1=wOf(vals[i]), w2=i<3?wOf(vals[i+1]):w1*0.82;
+    const d=`M${cx-w1/2},${y} L${cx+w1/2},${y} L${cx+w2/2},${y+sh} L${cx-w2/2},${y+sh} Z`;
+    const p=T.req?vals[i]/T.req:NaN;
+    g+=`<g class="fseg${i===fSel?" sel":""}" data-i="${i}" tabindex="0" role="button" aria-label="${s.n}: ${fmt(vals[i])} personas" data-tip="${s.n}: ${fmt(vals[i])} personas · ${pct(p)} del requerido">
+      <path d="${d}" fill="${s.c}" rx="6"></path>
+      <text class="fv" x="${cx}" y="${y+sh/2+11}" text-anchor="middle">${fmt(vals[i])}</text>
+    </g>
+    <text class="fl" x="0" y="${y+sh/2-2}">${s.n}</text>
+    <text class="fps" x="0" y="${y+sh/2+16}">${s.d}</text>
+    <text class="fp" x="${W-8}" y="${y+sh/2+2}" text-anchor="end">${i===0?"100%":pct(p)}</text>
+    <text class="fps" x="${W-8}" y="${y+sh/2+20}" text-anchor="end">del requerido</text>`;
+    if(i<3){
+      const loss=vals[i]-vals[i+1], ly=y+sh+gap/2, ok=loss<=0;
+      const lab=ok?(loss<0?`+${fmt(-loss)} ${i===0?"sobre requerido":""}`:"sin pérdida"):`−${fmt(loss)} ${leakTxt[i]}`;
+      const lw=lab.length*6.6+22;
+      g+=`<g class="leak${ok?" ok":""}" data-tip="${ST[i].n} → ${ST[i+1].n}: conversión ${vals[i]?pct(vals[i+1]/vals[i],0):"–"}"><rect x="${cx+wOf(vals[i+1])/2+14}" y="${ly-11}" width="${lw}" height="22" rx="11"></rect><text x="${cx+wOf(vals[i+1])/2+14+lw/2}" y="${ly+4}" text-anchor="middle">${lab}</text></g>`;
+    }
+  });
+  box.innerHTML=`<svg id="funnelSvg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Embudo de reclutamiento">${g}</svg>`;
+  const pick=i=>{fSel=i;box.querySelectorAll(".fseg").forEach(e=>{e.classList.toggle("sel",+e.dataset.i===i);});drawSide();};
+  box.querySelectorAll(".fseg").forEach(e=>{
+    e.addEventListener("click",()=>pick(+e.dataset.i));
+    e.addEventListener("keydown",ev=>{if(ev.key==="Enter"||ev.key===" "){ev.preventDefault();pick(+e.dataset.i);}});
+    e.addEventListener("mouseenter",()=>box.querySelectorAll(".fseg").forEach(o=>o.classList.toggle("dim",o!==e)));
+    e.addEventListener("mouseleave",()=>box.querySelectorAll(".fseg").forEach(o=>o.classList.remove("dim")));
+  });
+  function drawSide(){
+    const s=ST[fSel], v=vals[fSel], prev=fSel?vals[fSel-1]:null;
+    const by=new Map(); P.forEach(r=>{const b=r.banner||"Sin campaña";const o=by.get(b)||{v:0,req:0};o.v+=r[s.k]||0;o.req+=r.req||0;by.set(b,o);});
+    const arr=[...by.entries()].sort((a,b)=>b[1].v-a[1].v), bm=Math.max(1,...arr.map(x=>Math.max(x[1].v,x[1].req)));
+    side.innerHTML=`<div class="fsteps" role="group" aria-label="Etapa">${ST.map((x,i)=>`<button type="button" data-i="${i}" aria-pressed="${i===fSel}">${x.n}</button>`).join("")}</div>
+      <div><div class="eyebrow">${s.d}</div><div class="big">${fmt(v)}</div></div>
+      <div class="kpis"><div><b>${T.req?pct(v/T.req):"–"}</b><span>del requerido</span></div><div><b>${prev==null?"—":prev?pct(v/prev,0):"–"}</b><span>${prev==null?"Etapa inicial":"conversión vs etapa anterior"}</span></div></div>
+      <div class="eyebrow">Por campaña${fSel?" · la línea marca lo requerido":""}</div>
+      <div class="bb">${arr.map(([b,o])=>`<div class="bbr" data-tip="${esc(b)}: ${fmt(o.v)} de ${fmt(o.req)} requeridos (${o.req?pct(o.v/o.req,0):"–"})"><span>${esc(b)}</span><div class="t"><i style="width:${o.v/bm*100}%;background:${s.c}"></i>${fSel?`<u style="left:${Math.min(99.5,o.req/bm*100)}%"></u>`:""}</div><span class="v">${fmt(o.v)}${fSel&&o.req?` <small class="muted">${pct(o.v/o.req,0)}</small>`:""}</span></div>`).join("")}</div>`;
+    side.querySelectorAll(".fsteps button").forEach(bt=>bt.addEventListener("click",()=>pick(+bt.dataset.i)));
+  }
+  drawSide();
+}
+
 function periodRange(){
   const c=st.cut;
   if(st.period==="W"){const wd=(new Date(toUTC(c)).getUTCDay()+6)%7;const a=addDays(c,-wd);return [a,addDays(a,6)];}
@@ -293,15 +383,8 @@ function render(){
       <div class="det">Personas entregadas a Capacitación<br>${fmt(recOk)} en horario requerido · ${fmt(rec-recOk)} en otro</div></div>`
   ].join("");
 
-  /* funnel */
-  const stages=[["Requerido","Solicitado en requisiciones",req,"var(--p3035)"],["Entregado total","Todas las personas entregadas",total,"var(--p3035-80)"],["Entregado en horario","Entrega válida",valid,"var(--p3035-60)"],["Válido y en SLA","En horario y a tiempo",inSla,"var(--p338-dk)"]];
-  const mx=Math.max(1,...stages.map(s=>s[2]));
-  let fh=""; stages.forEach((s,i)=>{
-    const w=s[2]/mx*100, p=req?s[2]/req:NaN;
-    if(i>0){const prev=stages[i-1][2];const diff=s[2]-prev;fh+=`<div class="fstage"><div></div><div class="fdrop">${diff===0?"= sin cambio":diff<0?"▼ "+fmt(-diff)+" pers. ("+(prev?pct(-diff/prev,0):"–")+")":"▲ +"+fmt(diff)+" pers."}</div><div></div></div>`;}
-    fh+=`<div class="fstage"><div class="nm">${s[0]}<small>${s[1]}</small></div><div class="ftrack"><div class="fbar" style="width:${Math.max(w,4)}%;background:${s[3]}" data-tip="${s[0]}: ${fmt(s[2])} personas · ${pct(p)} vs requerido">${fmt(s[2])}</div></div><div class="pc">${i===0?"100%":pct(p)}<small>vs requerido</small></div></div>`;
-  });
-  $("#funnel").innerHTML = req||total? fh : `<div class="empty">No hay requisiciones con fecha compromiso en este periodo.</div>`;
+  /* funnel v2 */
+  renderFunnel(P,{req,total,valid,inSla});
 
   /* SLA stats + deviation distribution */
   const onTime=P.filter(r=>r.dev!=null&&r.dev<=0).length, late=P.filter(r=>r.dev!=null&&r.dev>0).length, pend=P.filter(r=>r.dev==null).length;
