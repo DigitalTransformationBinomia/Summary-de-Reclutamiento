@@ -100,6 +100,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .spark circle{fill:var(--p3035);stroke:#fff;stroke-width:2}
 @keyframes gfill{from{stroke-dashoffset:var(--len)}}
 .gauge .gv{animation:gfill .9s cubic-bezier(.2,.8,.2,1) both}
+.grid2>*,.grid3>*{min-width:0}
 @media (prefers-reduced-motion:reduce){.gauge .gv{animation:none}.kpi{transition:none}}
 .kdrawer{display:none;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(220px,.8fr);gap:22px}
 .kdrawer.open{display:grid}
@@ -256,6 +257,18 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
     </div>
   </section>
 
+  <section class="grid2">
+    <div class="card">
+      <div class="sechead"><h2>Entregas por grupo</h2><span class="note">Por fecha de entrega</span></div>
+      <div class="tscroll" style="max-height:none"><table id="grpTable"></table></div>
+      <div class="note" style="margin-top:8px" id="grpNote"></div>
+    </div>
+    <div class="card">
+      <div class="sechead"><h2>Estatus de requisiciones</h2><span class="note">Base: fecha compromiso en el periodo</span></div>
+      <div class="tscroll" style="max-height:none"><table id="statusTable"></table></div>
+    </div>
+  </section>
+
   <section class="card">
     <div class="sechead">
       <h2>Detalle por ID de requisición</h2>
@@ -263,7 +276,7 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
     </div>
     <div class="tscroll"><table id="detail"></table></div>
   </section>
-  <div class="note">Definiciones: Cobertura = entregado en horario requerido ÷ requerido. Cobertura en SLA = de lo válido, lo entregado en la fecha compromiso o antes. Adherencia = entregado en horario requerido ÷ entregado total. Semanal = lunes a domingo de la semana de la fecha de corte.</div>
+  <div class="note">Definiciones: Cobertura = entregado en horario requerido ÷ requerido. Cobertura en SLA = de lo válido, lo entregado en la fecha compromiso o antes. Entregado = Entrega 1 + Entrega 2 + Entrega 3. Desviación SLA = última entrega − fecha compromiso. Adherencia = entregado en horario requerido ÷ entregado total. Semanal = lunes a domingo de la semana de la fecha de corte.</div>
 </div>
 <footer class="foot"><img src="assets/logo-binomia-slogan.svg" alt="BINOMIA meaningful conexions"><span class="note">Reclutamiento · Transformación Digital</span></footer>
 <div id="tip" role="tooltip"></div>
@@ -295,20 +308,22 @@ const st = { rows: [], meta: null, period: "W", cut: todayISO, banner: "", onlyD
 try{ const p=localStorage.getItem("rec_period"); if(p) st.period=p; }catch(e){}
 
 /* ---------- derive per-row metrics (same rules as the Excel) ---------- */
+const ents=r=>[[r.f1,r.c1,r.h1],[r.f2,r.c2,r.h2],[r.f3,r.c3,r.h3]];
 function derive(r){
-  const c1=+r.c1||0, c2=+r.c2||0, req=+r.req||0;
-  const ok1 = r.h1 && r.h1===r.hreq, ok2 = r.h2 && r.h2===r.hreq;
-  const total=c1+c2, valid=(ok1?c1:0)+(ok2?c2:0), off=total-valid;
-  const inSla=(ok1&&r.f1&&r.f1<=r.fcomp?c1:0)+(ok2&&r.f2&&r.f2<=r.fcomp?c2:0);
-  const last = [r.f1,r.f2].filter(Boolean).sort().pop()||null;
+  const req=+r.req||0;
+  const E=ents(r).map(([f,c,h],g)=>({f,c:+c||0,h,g,ok:!!h&&h===r.hreq}));
+  const c1=E[0].c, c2=E[1].c, c3=E[2].c;
+  const total=E.reduce((s,e)=>s+e.c,0), valid=E.reduce((s,e)=>s+(e.ok?e.c:0),0), off=total-valid;
+  const inSla=E.reduce((s,e)=>s+(e.ok&&e.f&&r.fcomp&&e.f<=r.fcomp?e.c:0),0);
+  const last = E.map(e=>e.f).filter(Boolean).sort().pop()||null;
   const dev = (last && r.fcomp) ? diffDays(last,r.fcomp) : null;
   let status;
   if(total===0) status = (todayISO>r.fcomp) ? "Vencida sin entrega" : "Pendiente";
   else if(inSla>=req) status="Cumplida en SLA";
   else if(valid>=req) status="Cumplida fuera de SLA";
   else status="Incompleta";
-  const offH=[]; if(c1>0&&r.h1!==r.hreq) offH.push(r.h1); if(c2>0&&r.h2!==r.hreq&&!offH.includes(r.h2)) offH.push(r.h2);
-  return Object.assign({},r,{c1,c2,req,total,valid,off,inSla,outSla:valid-inSla,cov:req?valid/req:null,delta:valid-req,last,dev,status,offH});
+  const offH=[]; E.forEach(e=>{if(e.c>0&&!e.ok&&!offH.includes(e.h)) offH.push(e.h);});
+  return Object.assign({},r,{c1,c2,c3,E,req,total,valid,off,inSla,outSla:valid-inSla,cov:req?valid/req:null,delta:valid-req,last,dev,status,offH});
 }
 
 let kOpen=null;
@@ -316,7 +331,7 @@ function kpiCalc(rows,a,b){
   const P=rows.filter(r=>r.fcomp>=a&&r.fcomp<=b), S=k=>P.reduce((s,r)=>s+(r[k]||0),0);
   const req=S("req"),total=S("total"),valid=S("valid"),inSla=S("inSla"),off=S("off");
   const devs=P.filter(r=>r.dev!=null).map(r=>r.dev);
-  let rec=0,recOk=0; rows.forEach(r=>{[[r.f1,r.c1,r.h1],[r.f2,r.c2,r.h2]].forEach(([f,c,h])=>{if(f&&c&&f>=a&&f<=b){rec+=c;if(h===r.hreq)recOk+=c;}});});
+  let rec=0,recOk=0; rows.forEach(r=>{ents(r).forEach(([f,c,h])=>{if(f&&c&&f>=a&&f<=b){rec+=c;if(h===r.hreq)recOk+=c;}});});
   return {P,req,total,valid,inSla,outSla:valid-inSla,off,rec,recOk,cov:req?valid/req:NaN,sla:valid?inSla/valid:NaN,adh:total?valid/total:NaN,
     avgDev:devs.length?devs.reduce((s,x)=>s+x,0)/devs.length:null,late:devs.filter(x=>x>0).length,n:P.length};
 }
@@ -485,7 +500,7 @@ function render(){
   const avgDev=devs.length?devs.reduce((s,x)=>s+x,0)/devs.length:null;
   const defic=devs.filter(x=>x>0).reduce((s,x)=>s+x,0), superav=-devs.filter(x=>x<0).reduce((s,x)=>s+x,0);
   // recluta by delivery date
-  const dl=[]; all.forEach(r=>{ if(r.f1&&r.c1) dl.push({f:r.f1,n:r.c1,h:r.h1,ok:r.h1===r.hreq,b:r.banner}); if(r.f2&&r.c2) dl.push({f:r.f2,n:r.c2,h:r.h2,ok:r.h2===r.hreq,b:r.banner}); });
+  const dl=[]; all.forEach(r=>r.E.forEach(e=>{ if(e.f&&e.c) dl.push({f:e.f,n:e.c,h:e.h,ok:e.ok,b:r.banner,g:e.g}); }));
   const DP=dl.filter(d=>d.f>=a&&d.f<=b); const rec=DP.reduce((s,d)=>s+d.n,0); const recOk=DP.filter(d=>d.ok).reduce((s,d)=>s+d.n,0);
 
   renderKPIs(all,a,b);
@@ -519,20 +534,35 @@ function render(){
   $("#byHorario").innerHTML=hb(group("h"),"var(--p338-dk)");
   const yr=st.cut.slice(0,4), cm=+st.cut.slice(5,7);
   $("#monthTitle").textContent="Por mes · "+yr;
-  const months=MESES.map((m,i)=>{const pre=yr+"-"+pad(i+1);const D=dl.filter(d=>d.f.startsWith(pre));const ok=D.filter(d=>d.ok).reduce((s,d)=>s+d.n,0);const tot=D.reduce((s,d)=>s+d.n,0);return {m,ok,oth:tot-ok,tot};});
+  const months=MESES.map((m,i)=>{const pre=yr+"-"+pad(i+1);const D=dl.filter(d=>d.f.startsWith(pre));const ok=D.filter(d=>d.ok).reduce((s,d)=>s+d.n,0);const tot=D.reduce((s,d)=>s+d.n,0);const gs=[0,1,2].map(g=>D.filter(d=>d.g===g).reduce((s,d)=>s+d.n,0));return {m,ok,oth:tot-ok,tot,gs};});
   const mm=Math.max(1,...months.map(x=>x.tot));
-  $("#byMonth").innerHTML=months.map((x,i)=>`<div class="col${i+1===cm?" cur":""}" data-tip="${x.m} ${yr}: ${fmt(x.tot)} entregados · ${fmt(x.ok)} en horario · ${fmt(x.oth)} otro horario"><div class="val">${x.tot?fmt(x.tot):""}</div><div class="stk"><span style="height:${x.oth/mm*150}px;background:var(--p338)"></span><span style="height:${x.ok/mm*150}px;background:var(--s1);${x.oth?"":"border-radius:4px 4px 0 0"}"></span></div></div>`).join("");
+  $("#byMonth").innerHTML=months.map((x,i)=>`<div class="col${i+1===cm?" cur":""}" data-tip="${x.m} ${yr}: ${fmt(x.tot)} entregados · ${fmt(x.ok)} en horario · ${fmt(x.oth)} otro horario · E1 ${fmt(x.gs[0])} / E2 ${fmt(x.gs[1])} / E3 ${fmt(x.gs[2])}"><div class="val">${x.tot?fmt(x.tot):""}</div><div class="stk"><span style="height:${x.oth/mm*150}px;background:var(--p338)"></span><span style="height:${x.ok/mm*150}px;background:var(--s1);${x.oth?"":"border-radius:4px 4px 0 0"}"></span></div></div>`).join("");
   $("#byMonthX").innerHTML=months.map(x=>`<span>${x.m}</span>`).join("");
 
+  /* entregas por grupo + estatus */
+  const GN=["Entrega 1","Entrega 2 (complemento)","Entrega 3 (complemento)"];
+  let gt=`<thead><tr><th>Grupo de entrega</th><th class="n">Personas</th><th class="n">% del total</th><th class="n">En horario req.</th><th class="n">Adherencia</th></tr></thead><tbody>`;
+  GN.forEach((g,i)=>{const D=DP.filter(d=>d.g===i);const n=D.reduce((s,d)=>s+d.n,0),ok=D.filter(d=>d.ok).reduce((s,d)=>s+d.n,0);const ad=n?ok/n:NaN;
+    gt+=`<tr><td>${g}</td><td class="n">${fmt(n)}</td><td class="n">${pct(rec?n/rec:NaN,0)}<span class="mini"><i style="width:${rec?n/rec*100:0}%"></i></span></td><td class="n">${fmt(ok)}</td><td class="n">${n?`<span class="pill ${stateOf(ad,.95,.85)}">${pct(ad,0)}</span>`:"–"}</td></tr>`;});
+  gt+=`<tr><td><b>Total</b></td><td class="n"><b>${fmt(rec)}</b></td><td class="n"><b>${rec?"100%":"–"}</b></td><td class="n"><b>${fmt(recOk)}</b></td><td class="n"><b>${pct(rec?recOk/rec:NaN,0)}</b></td></tr></tbody>`;
+  $("#grpTable").innerHTML=gt;
+  const compl=rec?(rec-DP.filter(d=>d.g===0).reduce((s,d)=>s+d.n,0))/rec:NaN;
+  $("#grpNote").textContent=rec?`El ${pct(compl,0)} de lo entregado en el periodo llegó en entregas complementarias (Entrega 2 y 3).`:"Sin entregas en el periodo.";
+  const SO=["Cumplida en SLA","Cumplida fuera de SLA","Incompleta","Vencida sin entrega","Pendiente"], spS={"Cumplida en SLA":"good","Cumplida fuera de SLA":"warn","Pendiente":"neu","Incompleta":"crit","Vencida sin entrega":"crit"};
+  let stt=`<thead><tr><th>Estatus</th><th class="n">Requisiciones</th><th class="n">% del total</th></tr></thead><tbody>`;
+  SO.forEach(s=>{const n=P.filter(r=>r.status===s).length;stt+=`<tr><td><span class="pill ${spS[s]}">${s}</span></td><td class="n">${n}</td><td class="n">${pct(P.length?n/P.length:NaN,0)}</td></tr>`;});
+  stt+=`<tr><td><b>Total</b></td><td class="n"><b>${P.length}</b></td><td class="n"><b>${P.length?"100%":"–"}</b></td></tr></tbody>`;
+  $("#statusTable").innerHTML=stt;
+
   /* detail */
-  const D=(st.onlyDev?P.filter(r=>r.off>0||(r.dev!=null&&r.dev>0)||r.status!=="Cumplida en SLA"):P).slice().sort((x,y)=>x.fcomp<y.fcomp?-1:x.fcomp>y.fcomp?1:(x.id||x.com||"")<(y.id||y.com||"")?-1:1);
+  const D=(st.onlyDev?P.filter(r=>r.off>0||(r.dev!=null&&r.dev>0)||r.status!=="Cumplida en SLA"):P).slice().sort((x,y)=>x.fcomp<y.fcomp?-1:x.fcomp>y.fcomp?1:(x.id||x.puesto||"")<(y.id||y.puesto||"")?-1:1);
   const sp={"Cumplida en SLA":"good","Cumplida fuera de SLA":"warn","Pendiente":"neu","Incompleta":"crit","Vencida sin entrega":"crit"};
   let dt=`<thead><tr><th>ID requisición</th><th>Banner</th><th>Horario req.</th><th class="n">Req.</th><th class="n">Entregado</th><th class="n">Válido</th><th class="n">Cobertura</th><th>Compromiso</th><th>Entregas</th><th>SLA (días)</th><th>Horario</th><th>Estatus</th></tr></thead><tbody>`;
   D.forEach(r=>{
     const devTxt=r.dev==null?`<span class="pill neu">Sin entrega</span>`:r.dev>0?`<span class="pill crit">Déficit ${r.dev}</span>`:r.dev<0?`<span class="pill good">Superávit ${-r.dev}</span>`:`<span class="pill good">En fecha</span>`;
     const hTxt=r.total===0?"–":r.off===0?`<span class="pill good">Cumple</span>`:`<span class="pill crit">${r.off} en ${esc(r.offH.join(" / "))}</span>`;
-    const ent=[r.f1?dmy(r.f1)+" · "+r.c1+" "+esc(r.h1||""):"",r.f2?dmy(r.f2)+" · "+r.c2+" "+esc(r.h2||""):""].filter(Boolean).join("<br>")||"–";
-    const lin=(r.com||"").match(/^Línea ([^·]+)/); const idL=r.id?`<b>${esc(r.id)}</b>`:`<span class="muted">Sin ID</span>${lin?`<br><span class="note">${esc(lin[1].trim())}</span>`:""}`;
+    const ent=r.E.filter(e=>e.f).map(e=>`<span class="note">E${e.g+1}</span> ${dmy(e.f)} · ${e.c} ${esc(e.h||"")}`).join("<br>")||"–";
+    const idL=(r.id?`<b>${esc(r.id)}</b>`:`<span class="muted">Sin ID</span>`)+(r.puesto?`<br><span class="note">${esc(r.puesto)}</span>`:"");
     dt+=`<tr><td>${idL}</td><td>${esc(r.banner)}</td><td>${esc(r.hreq)}</td><td class="n">${r.req}</td><td class="n">${r.total}</td><td class="n">${r.valid}</td><td class="n">${r.cov==null?"–":pct(r.cov,0)}</td><td>${dmy(r.fcomp)}</td><td style="white-space:nowrap;font-size:12px">${ent}</td><td>${devTxt}</td><td>${hTxt}</td><td><span class="pill ${sp[r.status]}">${r.status}</span></td></tr>`;
   });
   dt+="</tbody>";
@@ -555,7 +585,7 @@ $("#onlyDev").addEventListener("change",e=>{st.onlyDev=e.target.checked;render()
 const tip=$("#tip");
 document.addEventListener("mousemove",e=>{const t=e.target.closest("[data-tip]");if(!t){tip.style.opacity=0;return;}tip.textContent=t.dataset.tip;tip.style.opacity=1;const x=Math.min(e.clientX+14,window.innerWidth-tip.offsetWidth-8);tip.style.left=x+"px";tip.style.top=(e.clientY+14)+"px";});
 
-const fromArr=a=>({id:a[0],fsol:a[1],banner:a[2],puesto:a[3],hreq:a[4],req:a[5],fcomp:a[6],f1:a[7],c1:a[8],h1:a[9],f2:a[10],c2:a[11],h2:a[12],rec:a[13],com:a[14]});
+const fromArr=a=>({id:a[0],fsol:a[1],banner:a[2],puesto:a[3],hreq:a[4],req:a[5],fcomp:a[6],f1:a[7],c1:a[8],h1:a[9],f2:a[10],c2:a[11],h2:a[12],f3:a[13],c3:a[14],h3:a[15]});
 function setStamp(){
   const m=st.meta; $("#dataStamp").innerHTML = m ? `Datos al <b>${esc(new Date(m.updatedAt).toLocaleString("es-MX",{dateStyle:"medium",timeStyle:"short",timeZone:"America/Mexico_City"}))}</b> · ${m.count} requisiciones` : "";
 }
